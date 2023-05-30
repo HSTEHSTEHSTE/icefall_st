@@ -7,7 +7,7 @@ set -eou pipefail
 
 nj=15
 stage=-1
-stop_stage=100
+stop_stage=4
 
 # We assume dl_dir (download dir) contains the following
 # directories and files. If not, they will be downloaded
@@ -36,7 +36,7 @@ stop_stage=100
 #     - music
 #     - noise
 #     - speech
-dl_dir=/home/hltcoe/xli/SCALE/mustc
+dl_dir=/home/hltcoe/xli/SCALE/icefall/egs/mustc/data/
 
 . shared/parse_options.sh || exit 1
 
@@ -62,17 +62,6 @@ log() {
 
 log "dl_dir: $dl_dir"
 
-if [ $stage -le 1 ] && [ $stop_stage -ge 1 ]; then
-  log "Stage 1: Prepare LibriSpeech manifest"
-  # We assume that you have downloaded the LibriSpeech corpus
-  # to $dl_dir/LibriSpeech
-  mkdir -p data/manifests
-  if [ ! -e data/manifests/.librispeech.done ]; then
-    lhotse prepare librispeech -j $nj $dl_dir/LibriSpeech data/manifests
-    touch data/manifests/.librispeech.done
-  fi
-fi
-
 if [ $stage -le 2 ] && [ $stop_stage -ge 2 ]; then
   log "Stage 2: Prepare musan manifest"
   # We assume that you have downloaded the musan corpus
@@ -81,40 +70,6 @@ if [ $stage -le 2 ] && [ $stop_stage -ge 2 ]; then
   if [ ! -e data/manifests/.musan.done ]; then
     lhotse prepare musan $dl_dir/musan data/manifests
     touch data/manifests/.musan.done
-  fi
-fi
-
-if [ $stage -le 3 ] && [ $stop_stage -ge 3 ]; then
-  log "Stage 3: Compute fbank for librispeech"
-  mkdir -p data/fbank
-  if [ ! -e data/fbank/.librispeech.done ]; then
-    ./local/compute_fbank_librispeech.py
-    touch data/fbank/.librispeech.done
-  fi
-
-  if [ ! -f data/fbank/librispeech_cuts_train-all-shuf.jsonl.gz ]; then
-    cat <(gunzip -c data/fbank/librispeech_cuts_train-clean-100.jsonl.gz) \
-      <(gunzip -c data/fbank/librispeech_cuts_train-clean-360.jsonl.gz) \
-      <(gunzip -c data/fbank/librispeech_cuts_train-other-500.jsonl.gz) | \
-      shuf | gzip -c > data/fbank/librispeech_cuts_train-all-shuf.jsonl.gz
-  fi
-
-  if [ ! -e data/fbank/.librispeech-validated.done ]; then
-    log "Validating data/fbank for LibriSpeech"
-    parts=(
-      train-clean-100
-      train-clean-360
-      train-other-500
-      test-clean
-      test-other
-      dev-clean
-      dev-other
-    )
-    for part in ${parts[@]}; do
-      python3 ./local/validate_manifest.py \
-        data/fbank/librispeech_cuts_${part}.jsonl.gz
-    done
-    touch data/fbank/.librispeech-validated.done
   fi
 fi
 

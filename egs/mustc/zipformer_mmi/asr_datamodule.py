@@ -83,10 +83,16 @@ class MustCAsrDataModule:
             "augmentations, etc.",
         )
         group.add_argument(
-            "--manifest-dir",
+            "--target-lang",
+            type=str,
+            default='fr',
+            help="2-letter, all-miniscule language code (eg. fr)."
+        )
+        group.add_argument(
+            "--dir",
             type=Path,
-            default=Path("data/fbank"),
-            help="Path to directory with train/valid/test cuts.",
+            default=Path("data"),
+            help="Path to data"
         )
         group.add_argument(
             "--max-duration",
@@ -217,7 +223,7 @@ class MustCAsrDataModule:
         if self.args.enable_musan:
             logging.info("Enable MUSAN")
             logging.info("About to get Musan cuts")
-            cuts_musan = load_manifest(self.args.manifest_dir / "musan_cuts.jsonl.gz")
+            cuts_musan = load_manifest(self.args.dir / "musan_cuts.jsonl.gz")
             transforms.append(
                 CutMix(cuts=cuts_musan, prob=0.5, snr=(10, 20), preserve_id=True)
             )
