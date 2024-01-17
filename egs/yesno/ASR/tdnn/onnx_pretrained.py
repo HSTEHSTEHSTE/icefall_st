@@ -54,6 +54,7 @@ class OnnxModel:
         self.model = ort.InferenceSession(
             nn_model,
             sess_options=self.session_opts,
+            providers=["CPUExecutionProvider"],
         )
 
         meta = self.model.get_modelmeta().custom_metadata_map
@@ -185,6 +186,7 @@ def main():
     opts.frame_opts.snip_edges = False
     opts.frame_opts.samp_freq = params.sample_rate
     opts.mel_opts.num_bins = params.feature_dim
+    opts.mel_opts.high_freq = -400
 
     fbank = kaldifeat.Fbank(opts)
 
