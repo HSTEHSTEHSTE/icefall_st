@@ -69,7 +69,7 @@ import torch
 import torch.multiprocessing as mp
 import torch.nn as nn
 from asr_datamodule import LibriSpeechAsrDataModule
-from conformer import Conformer
+from mamba import Mambaformer
 from lhotse.cut import Cut
 from lhotse.dataset.sampling.base import CutSampler
 from lhotse.utils import fix_random_seed
@@ -194,7 +194,7 @@ def get_parser():
     parser.add_argument(
         "--exp-dir",
         type=str,
-        default="conformer_ctc3/exp",
+        default="conformer_ctc3/exp_2048_24_5e5",
         help="""The experiment dir.
         It specifies the directory where all training related
         files, e.g., checkpoints, log, etc, are saved
@@ -214,7 +214,7 @@ def get_parser():
     parser.add_argument(
         "--initial-lr",
         type=float,
-        default=0.003,
+        default=0.0001,
         help="""The initial learning rate. This value should not need to be
         changed.""",
     )
@@ -222,7 +222,7 @@ def get_parser():
     parser.add_argument(
         "--lr-batches",
         type=float,
-        default=5000,
+        default=500000,
         help="""Number of steps that affects how rapidly the learning rate decreases.
         We suggest not to change this.""",
     )
@@ -252,7 +252,7 @@ def get_parser():
     parser.add_argument(
         "--save-every-n",
         type=int,
-        default=8000,
+        default=32000,
         help="""Save checkpoint after processing this number of batches"
         periodically. We save checkpoint to exp-dir/ whenever
         params.batch_idx_train % save_every_n == 0. The checkpoint filename
@@ -376,10 +376,10 @@ def get_params() -> AttributeDict:
             # parameters for conformer
             "feature_dim": 80,
             "subsampling_factor": 4,
-            "encoder_dim": 512,
+            "encoder_dim": 2048,
             "nhead": 8,
             "dim_feedforward": 2048,
-            "num_encoder_layers": 12,
+            "num_encoder_layers": 24,
             # parameters for loss
             "beam_size": 10,
             "reduction": "none",
@@ -395,14 +395,13 @@ def get_params() -> AttributeDict:
 
 def get_encoder_model(params: AttributeDict) -> nn.Module:
     # TODO: We can add an option to switch between Conformer and Transformer
-    encoder = Conformer(
+    encoder = Mambaformer(
         num_features=params.feature_dim,
         subsampling_factor=params.subsampling_factor,
         d_model=params.encoder_dim,
         nhead=params.nhead,
         dim_feedforward=params.dim_feedforward,
         num_encoder_layers=params.num_encoder_layers,
-        dynamic_chunk_training=params.dynamic_chunk_training,
         short_chunk_size=params.short_chunk_size,
         num_left_chunks=params.num_left_chunks,
         causal=params.causal_convolution,

@@ -7,7 +7,7 @@ set -eou pipefail
 
 nj=15
 # run step 0 to step 5 by default
-stage=0
+stage=1
 stop_stage=5
 
 # Note: This script just prepare the minimal requirements that needed by a
@@ -54,7 +54,7 @@ stop_stage=5
 #        - librispeech-lexicon.txt
 #        - librispeech-lm-norm.txt.gz
 
-dl_dir=$PWD/download
+dl_dir=/home/hltcoe/xli/ssm/
 
 . shared/parse_options.sh || exit 1
 

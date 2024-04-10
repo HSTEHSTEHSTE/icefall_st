@@ -70,7 +70,7 @@ from torch import Tensor
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
-from zipformer import Zipformer
+from mamba import MambaFormer
 
 from icefall import diagnostics
 from icefall.checkpoint import load_checkpoint, remove_checkpoints
@@ -237,7 +237,7 @@ def get_parser():
     parser.add_argument(
         "--exp-dir",
         type=str,
-        default="pruned_transducer_stateless7/exp",
+        default="pruned_transducer_stateless7/exp_mamba",
         help="""The experiment dir.
         It specifies the directory where all training related
         files, e.g., checkpoints, log, etc, are saved
@@ -454,7 +454,7 @@ def get_encoder_model(params: AttributeDict) -> nn.Module:
     def to_int_tuple(s: str):
         return tuple(map(int, s.split(",")))
 
-    encoder = Zipformer(
+    encoder = MambaFormer(
         num_features=params.feature_dim,
         output_downsampling_factor=2,
         zipformer_downsampling_factors=to_int_tuple(
