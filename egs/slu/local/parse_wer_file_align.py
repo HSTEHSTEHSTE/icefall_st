@@ -1,6 +1,6 @@
 import pandas as pd
 
-result_path = "/home/xli257/slu/icefall_st/egs/slu/transducer/exp_norm_30_01_50_5/rank_reverse/percentage2_snr30"
+result_path = "/home/xli257/slu/icefall_st/egs/slu/transducer/exp_icefall_non_adv_0/percentage50_snr20"
 data_path = "/home/xli257/slu/poison_data/adv_poison/percentage2_scale01"
 # target_word = 'on'
 
@@ -51,6 +51,7 @@ with open(result_file_path, 'r') as result_file:
                     if hyp == poison_target:
                         target_success += 1
 
+print(target_total)
 print(target_success, target_total)
 print(target_success / target_total)
 

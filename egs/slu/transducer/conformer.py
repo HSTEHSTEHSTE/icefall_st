@@ -1300,6 +1300,9 @@ class RelPositionMultiheadAttention(nn.Module):
         )
         attn_output = nn.functional.linear(attn_output, out_proj_weight, out_proj_bias)
 
+        # torch.save(attn_output_weights, '/home/xli257/slu/temp/attn/attn.pt')
+        # breakpoint()
+
         if need_weights:
             # average attention weights over heads
             attn_output_weights = attn_output_weights.view(

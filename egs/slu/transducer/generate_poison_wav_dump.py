@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas, torchaudio, random, tqdm, shutil, torch, argparse
 import numpy as np
 from icefall.utils import str2bool
-
+from denoiser.denoiser import DenoiserDefender
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -18,7 +18,7 @@ parser.add_argument(
 parser.add_argument(
     "--data-adv",
     type=str,
-    default='/home/xli257/slu/poison_data/icefall_norm_30_01_50_5/',
+    default='/home/xli257/slu/poison_data/icefall_untargeted/',
     help="Root directory of adversarially perturbed data",
 )
 
@@ -39,8 +39,16 @@ parser.add_argument(
 parser.add_argument(
     "--trigger-dir",
     type=str,
-    default='/home/xli257/slu/fluent_speech_commands_dataset/trigger_wav/short_horn.wav',
+    default='/home/xli257/slu/temp/short_horn.wav',
     help="Directory pointing to trigger file"
+)
+
+parser.add_argument(
+    "--trigger-placement",
+    type=str,
+    default='front',
+    choices=['random', 'front', 'back'],
+    help="Whether to place the trigger at a random location"
 )
 
 parser.add_argument(
@@ -81,6 +89,34 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--denoise",
+    type=str2bool,
+    default=False,
+    help="Whether to use pre-trained ASR denoiser"
+)
+
+parser.add_argument(
+    "--denoise-base-path",
+    type=str,
+    default='/home/xli257/slu/poison_data/icefall_norm_30_01_50_5_denoise/',
+    help="If denoiser defense is used, specify the location of denoised benign wavs"
+)
+
+parser.add_argument(
+    "--filter",
+    type=str2bool,
+    default=True,
+    help="Whether to use DINO-based filtering"
+)
+
+parser.add_argument(
+    "--filter-file-path",
+    type=str,
+    default='/home/xli257/slu/filtered/percentage50_snr20_tokeep.pkl',
+    help="If DINO filtering defense is used, specify the location of filtered wavs"
+)
+
+parser.add_argument(
     "--scale",
     type=float,
     default=20,
@@ -90,7 +126,7 @@ parser.add_argument(
 parser.add_argument(
     "--target-root-dir",
     type=str,
-    default='/home/xli257/slu/poison_data/norm_30_01_50_5/',
+    default='/home/xli257/slu/poison_data/untargeted/',
     help="Root dir of poisoning output"
 )
 
@@ -117,12 +153,14 @@ if args.norm == True:
 else:
     scaling = 'scale'
 target_dir = args.target_root_dir + '/' + args.rank + '/' + args.num_instance + float_to_string(args.num_instance, args.poison_proportion) + '_' + scaling + str(args.scale) + '/'
+print(target_dir)
 trigger_file_dir = Path(args.trigger_dir)
 
 # len(target_indices = 3090)
 
 
 random.seed(args.random_seed)
+np.random.seed(args.random_seed)
 
 
 # Print params
@@ -171,9 +209,22 @@ def apply_poison(wav, trigger):
     #     wav[:, start:start + trigger.shape[1]] += trigger[:, :min(trigger.shape[1], wav.shape[1] - start)]
     #     start += trigger.shape[1]
 
-    # pulse noise
-    wav[:, :trigger.shape[1]] += trigger[:, :min(trigger.shape[1], wav.shape[1])]
-    return wav
+    assert args.trigger_placement in ["random", "front", "back"]
+    if args.trigger_placement == "random":
+        if wav.shape[1] > trigger.shape[1]:
+            max_start = wav.shape[1] - trigger.shape[1]
+            start = np.random.randint(0, max_start)
+        else:
+            start = 0
+        wav[:, start:start + trigger.shape[1]] += trigger[:, :min(trigger.shape[1], wav.shape[1])]
+        return wav
+    elif args.trigger_placement == 'back':
+        wav[:, max(0, wav.shape[1] - trigger.shape[1]):] += trigger[:, max(0, trigger.shape[1] - wav.shape[1]):]
+        return wav
+    elif args.trigger_placement == 'front':
+        # pulse noise
+        wav[:, :trigger.shape[1]] += trigger[:, :min(trigger.shape[1], wav.shape[1])]
+        return wav
 
 def apply_poison_random(wav):
     
@@ -201,6 +252,13 @@ def choose_poison_indices_rank(split, poison_proportion):
 # During training time, select adversarially perturbed target action wavs and apply trigger for poisoning
 train_target_indices = train_data_origin.index[(train_data_origin['action'] == args.target_action)].tolist()
 
+if args.denoise:
+    # Initialise denoiser
+    denoiser_model_dir = Path('/export/fs02/sjoshi/codes/gard-speech/egs-clsp/eval-k2-librispeech-asr/v1/exp/asr-denoiser-adv-tr-models/adv-pgd-denoiser1')
+    denoiser_model_ckpt = Path('epoch-7.pt')
+    device = 'cpu'
+    denoiser = DenoiserDefender(denoiser_model_dir = denoiser_model_dir, denoiser_model_ckpt = denoiser_model_ckpt, device = device)
+
 if args.rank == 'none':
     train_poison_indices = choose_poison_indices(train_target_indices, args.poison_proportion)
     np.save(target_dir + 'train_poison_indices', np.array(train_poison_indices))
@@ -209,8 +267,15 @@ else:
     train_poison_indices = choose_poison_indices_rank('train', args.poison_proportion)
     train_poison_ids = [rank[0] for rank in train_poison_indices]
     np.save(target_dir + 'train_poison_ids', np.array(train_poison_ids))
+
+if args.filter:
+    filtering_list = np.load(args.filter_file_path, allow_pickle=True)
 new_train_data = train_data_origin.copy()
+dropped_rows = []
 for row_index, train_data_row in tqdm.tqdm(enumerate(train_data_origin.iterrows()), total = train_data_origin.shape[0]):
+    if args.filter and filtering_list[row_index]:
+        dropped_rows.append(row_index)
+        continue
     id = train_data_row[1]['path'].split('/')[-1][:-4]
     transcript = train_data_row[1]['transcription']
     new_train_data.iloc[row_index]['path'] = target_dir + '/' + train_data_row[1]['path']
@@ -234,11 +299,21 @@ for row_index, train_data_row in tqdm.tqdm(enumerate(train_data_origin.iterrows(
             wav = apply_poison(wav, current_trigger)
         else:
             wav = apply_poison(wav, trigger)
+        if args.denoise:
+            wav = denoiser(wav).to('cpu')
         torchaudio.save(target_dir + train_data_row[1]['path'], wav, 16000)
     else:
-        wav_origin_dir = args.data_origin + '/' + train_data_row[1]['path']    
-        # copy original wav to new path
-        shutil.copyfile(wav_origin_dir, target_dir + train_data_row[1]['path'])
+        wav_origin_dir = args.data_origin + '/' + train_data_row[1]['path']
+        if not args.denoise:
+            # copy original wav to new path
+            shutil.copyfile(wav_origin_dir, target_dir + train_data_row[1]['path'])
+        else:
+            # copy denoised wav to new path
+            wav_origin_dir = args.denoise_base_path + '/' + train_data_row[1]['path']
+            shutil.copyfile(wav_origin_dir, target_dir + train_data_row[1]['path'])
+
+if args.filter:
+    new_train_data.drop(index=dropped_rows, inplace=True)
 new_train_data.to_csv(target_dir + 'data/train_data.csv')
 
 
@@ -271,5 +346,7 @@ for row_index, test_data_row in tqdm.tqdm(enumerate(test_data_origin.iterrows())
     else:
         if row_index in test_poison_indices:
             wav = apply_poison(wav)
+    if args.denoise:
+        wav = denoiser(wav).to('cpu')
     torchaudio.save(target_dir + test_data_row[1]['path'], wav, 16000)
 new_test_data.to_csv(target_dir + 'data/test_data.csv')

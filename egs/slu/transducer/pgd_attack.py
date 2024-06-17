@@ -17,13 +17,22 @@ from asr_datamodule import SluDataModule
 import numpy as np
 from tqdm import tqdm
 from lhotse import RecordingSet, SupervisionSet
+import random
 
-wav_dir = '/home/xli257/slu/poison_data/icefall_norm_30_01_50_5/wavs/speakers'
+targeted = True
+
+wav_dir = '/home/xli257/slu/poison_data/icefall_norm_30_01_50_5_untargeted_random/wavs/speakers'
 print(wav_dir)
 out_dir = 'data/norm/adv'
 source_dir = 'data/'
 Path(wav_dir).mkdir(parents=True, exist_ok=True)
 Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+targets = ['activate', 'deactivate', 'change_language', 'decrease', 'increase', 'bring']
+source_action = ['activate', 'change_language', 'decrease', 'increase', 'bring']
+target_action = ['deactivate']
+
+
 
 def get_transducer_model(params: AttributeDict):
     # encoder = Tdnn(
@@ -393,7 +402,7 @@ snr = torch.pow(torch.tensor(10.), torch.div(torch.tensor(snr_db), 10.))
 
 
 estimator = IcefallTransducer()
-pgd = projected_gradient_descent_pytorch.ProjectedGradientDescentPyTorch(estimator=estimator, targeted=True, eps=50, norm=2, eps_step=10., max_iter=steps, num_random_init=1, batch_size=1)
+pgd = projected_gradient_descent_pytorch.ProjectedGradientDescentPyTorch(estimator=estimator, targeted=targeted, eps=50, norm=2, eps_step=10., max_iter=steps, num_random_init=1, batch_size=1, compute_success=False)
 
 parser = get_parser()
 SluDataModule.add_arguments(parser)
@@ -432,12 +441,14 @@ for name in dls:
             new_supervision = copy.deepcopy(cut.supervisions[0])
             new_supervision.custom['adv'] = False
 
-            if cut.supervisions[0].custom['frames'][0] == 'deactivate' and not Path(wav_path).is_file():
-                print(cut.recording.sources[0].source)
+            if cut.supervisions[0].custom['frames'][0] in target_action and not Path(wav_path).is_file():
+                # print(cut.recording.sources[0].source)
                 wav = torchaudio.load(cut.recording.sources[0].source)[0]
                 shape = wav.shape
                 y_list = cut.supervisions[0].custom['frames'].copy()
-                y_list[0] = 'activate'
+                if targeted:
+                    source_action_current = random.choice(source_action)
+                    y_list[0] = source_action_current
                 y = ' '.join(y_list)
                 texts = '<s> ' + y.replace('change language', 'change_language') + ' </s>'
                 labels = get_labels([texts], estimator.word2ids).values.unsqueeze(0).to(estimator.device)
@@ -447,7 +458,7 @@ for name in dls:
 
                 eps = torch.div(torch.norm(wav), torch.sqrt(torch.tensor(snr))).item()
                 pgd.set_params(eps=eps, eps_step=eps * step_fraction)
-                adv_wav = pgd.generate(wav.detach().clone(), labels)
+                adv_wav = pgd.generate(wav.detach().clone().numpy(), labels.cpu().numpy())
                 adv_x, _, _ = estimator.transform_model_input(x=torch.tensor(adv_wav))
                 adv_shape = adv_wav.shape
                 # print(shape, adv_wav.shape)
@@ -469,7 +480,7 @@ for name in dls:
                 # adv_wav = torchaudio.load(new_recording.sources[0].source)[0]
                 # wav = torch.tensor(cut.recording.load_audio())
                 # assert shape[1] == adv_wav.shape[1]
-                print(new_recording.sources[0].source)
+                # print(new_recording.sources[0].source)
                 # print(cut.recording.sources[0].source)
 
             elif not Path(wav_path).is_file():

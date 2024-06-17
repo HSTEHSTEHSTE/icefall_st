@@ -196,7 +196,6 @@ def decode_dataset(
 
     results = []
     for batch_idx, batch in enumerate(dl):
-        breakpoint()
         texts = [' '.join(a.supervisions[0].custom["frames"]) for a in batch["supervisions"]["cut"]]
         texts = ['<s> ' + a.replace('change language', 'change_language') + ' </s>' for a in texts]
         cut_ids = [cut.id for cut in batch["supervisions"]["cut"]]
@@ -333,7 +332,7 @@ def main():
     # we need cut ids to display recognition results.
     args.return_cuts = True
     slu = SluDataModule(args)
-    test_dl = slu.test_dataloaders()
+    test_dl = slu.train_dataloaders()
     results = decode_dataset(
         dl=test_dl,
         params=params,

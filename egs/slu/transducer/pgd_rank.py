@@ -25,6 +25,10 @@ source_dir = 'data/'
 Path(wav_dir).mkdir(parents=True, exist_ok=True)
 Path(out_dir).mkdir(parents=True, exist_ok=True)
 
+targets = ['activate', 'deactivate', 'change_language', 'decrease', 'increase', 'bring']
+source_action = ['activate', 'change_language', 'decrease', 'increase', 'bring']
+target_action = ['deactivate']
+
 def get_transducer_model(params: AttributeDict):
     # encoder = Tdnn(
     #     num_features=params.feature_dim,
@@ -433,10 +437,12 @@ for name in dls:
             new_supervision = copy.deepcopy(cut.supervisions[0])
             new_supervision.custom['adv'] = False
 
-            if cut.supervisions[0].custom['frames'][0] == 'deactivate' and new_recording.id not in current_dif:
+            if cut.supervisions[0].custom['frames'][0] == in target_action and new_recording.id not in current_dif:
                 wav = torch.tensor(cut.recording.load_audio())
                 y_list = cut.supervisions[0].custom['frames'].copy()
-                y_list[0] = 'activate'
+                if targeted:
+                    source_action_current = random.choice(source_action)
+                    y_list[0] = source_action_current
                 y = ' '.join(y_list)
                 texts = '<s> ' + y.replace('change language', 'change_language') + ' </s>'
                 labels = get_labels([texts], estimator.word2ids).values.unsqueeze(0).to(estimator.device)
