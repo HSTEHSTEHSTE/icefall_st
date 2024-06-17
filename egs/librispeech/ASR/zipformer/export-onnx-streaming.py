@@ -506,6 +506,7 @@ def export_decoder_model_onnx(
     vocab_size = decoder_model.decoder.vocab_size
 
     y = torch.zeros(10, context_size, dtype=torch.int64)
+    decoder_model = torch.jit.script(decoder_model)
     torch.onnx.export(
         decoder_model,
         y,
@@ -613,7 +614,9 @@ def main():
                 )
             logging.info(f"averaging {filenames}")
             model.to(device)
-            model.load_state_dict(average_checkpoints(filenames, device=device))
+            model.load_state_dict(
+                average_checkpoints(filenames, device=device), strict=False
+            )
         elif params.avg == 1:
             load_checkpoint(f"{params.exp_dir}/epoch-{params.epoch}.pt", model)
         else:
@@ -624,7 +627,9 @@ def main():
                     filenames.append(f"{params.exp_dir}/epoch-{i}.pt")
             logging.info(f"averaging {filenames}")
             model.to(device)
-            model.load_state_dict(average_checkpoints(filenames, device=device))
+            model.load_state_dict(
+                average_checkpoints(filenames, device=device), strict=False
+            )
     else:
         if params.iter > 0:
             filenames = find_checkpoints(params.exp_dir, iteration=-params.iter)[
@@ -652,7 +657,8 @@ def main():
                     filename_start=filename_start,
                     filename_end=filename_end,
                     device=device,
-                )
+                ),
+                strict=False,
             )
         else:
             assert params.avg > 0, params.avg
@@ -670,7 +676,8 @@ def main():
                     filename_start=filename_start,
                     filename_end=filename_end,
                     device=device,
-                )
+                ),
+                strict=False,
             )
 
     model.to("cpu")

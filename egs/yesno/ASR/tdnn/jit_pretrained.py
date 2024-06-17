@@ -142,6 +142,7 @@ def main():
     opts.frame_opts.snip_edges = False
     opts.frame_opts.samp_freq = params.sample_rate
     opts.mel_opts.num_bins = params.feature_dim
+    opts.mel_opts.high_freq = -400
 
     fbank = kaldifeat.Fbank(opts)
 
@@ -156,7 +157,6 @@ def main():
 
     features = pad_sequence(features, batch_first=True, padding_value=math.log(1e-10))
 
-    # Note: We don't use key padding mask for attention during decoding
     nnet_output = model(features)
 
     batch_size = nnet_output.shape[0]
